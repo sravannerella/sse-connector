@@ -1,5 +1,7 @@
 package org.mule.extension.sse.internal.connection;
 
+import org.mule.runtime.http.api.HttpService;
+import org.mule.runtime.http.api.server.HttpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,10 +24,10 @@ public class SSEConnection {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SSEConnection.class);
 
-    private final String serverHost;
-    private final int serverPort;
-    private final String basePath;
+    private final HttpService httpService;
+    private final String listenerConfig;
     private boolean initialized;
+    private HttpServer httpServer;
     
     // Thread-safe collection to store connected clients
     private final Map<String, SSEClientConnection> connectedClients;
@@ -36,14 +38,12 @@ public class SSEConnection {
     /**
      * Creates a new SSE connection
      * 
-     * @param serverHost the server host
-     * @param serverPort the server port
-     * @param basePath the base path for the SSE endpoint
+     * @param httpService the HTTP service for looking up the HTTP server
+     * @param listenerConfig the HTTP listener config name
      */
-    public SSEConnection(String serverHost, int serverPort, String basePath) {
-        this.serverHost = serverHost;
-        this.serverPort = serverPort;
-        this.basePath = basePath;
+    public SSEConnection(HttpService httpService, String listenerConfig) {
+        this.httpService = httpService;
+        this.listenerConfig = listenerConfig;
         this.initialized = false;
         this.connectedClients = new ConcurrentHashMap<>();
         this.eventListeners = new CopyOnWriteArrayList<>();
@@ -60,12 +60,32 @@ public class SSEConnection {
             return;
         }
 
-        LOGGER.info("Initializing SSE connection on {}:{}{}", serverHost, serverPort, basePath);
+        LOGGER.info("Initializing SSE connection - Listener Config: {}", listenerConfig);
         
-        // Initialize connection resources
-        this.initialized = true;
-        
-        LOGGER.info("SSE connection initialized successfully");
+        try {
+            // Get the HTTP server from the referenced listener config
+            if (listenerConfig != null && !listenerConfig.isEmpty()) {
+                httpServer = httpService.getServerFactory().lookup(listenerConfig);
+                
+                if (httpServer == null) {
+                    throw new IOException("HTTP Listener config '" + listenerConfig + "' not found. " +
+                        "Make sure the http:listener-config exists and is started before this SSE connection.");
+                }
+                
+                LOGGER.info("HTTP server obtained from listener config: {}", listenerConfig);
+            } else {
+                LOGGER.warn("No listener config specified, HTTP server will be null");
+            }
+            
+            // Initialize connection resources
+            this.initialized = true;
+            
+            LOGGER.info("SSE connection initialized successfully");
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Failed to initialize SSE connection: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -188,29 +208,20 @@ public class SSEConnection {
     }
 
     /**
-     * Gets the server host
+     * Gets the HTTP server
      * 
-     * @return the server host
+     * @return the HTTP server
      */
-    public String getServerHost() {
-        return serverHost;
+    public HttpServer getHttpServer() {
+        return httpServer;
     }
 
     /**
-     * Gets the server port
+     * Gets the listener config name
      * 
-     * @return the server port
+     * @return the listener config name
      */
-    public int getServerPort() {
-        return serverPort;
-    }
-
-    /**
-     * Gets the base path
-     * 
-     * @return the base path
-     */
-    public String getBasePath() {
-        return basePath;
+    public String getListenerConfig() {
+        return listenerConfig;
     }
 }

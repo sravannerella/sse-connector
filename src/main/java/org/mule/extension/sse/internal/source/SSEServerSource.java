@@ -8,18 +8,26 @@ import org.mule.runtime.extension.api.annotation.param.MediaType;
 import org.mule.runtime.extension.api.annotation.param.Parameter;
 import org.mule.runtime.extension.api.annotation.param.Optional;
 import org.mule.runtime.extension.api.annotation.param.display.DisplayName;
+import org.mule.runtime.extension.api.annotation.param.display.Summary;
 import org.mule.runtime.extension.api.runtime.source.Source;
 import org.mule.runtime.extension.api.runtime.source.SourceCallback;
+import org.mule.runtime.http.api.server.HttpServer;
+import org.mule.runtime.http.api.server.RequestHandler;
+import org.mule.runtime.http.api.server.RequestHandlerManager;
+import org.mule.runtime.http.api.domain.message.response.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.mule.extension.sse.internal.connection.SSEConnection;
 import org.mule.extension.sse.internal.connection.SSEClientConnection;
 
+import java.io.OutputStream;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * SSE Server Source
@@ -55,8 +63,8 @@ public class SSEServerSource extends Source<String, Void> {
      * The endpoint path for SSE connections
      */
     @Parameter
-    @Optional(defaultValue = "/events")
-    @DisplayName("Endpoint Path")
+    @DisplayName("Path")
+    @Summary("The path where SSE clients will connect")
     private String path;
 
     /**
@@ -65,6 +73,7 @@ public class SSEServerSource extends Source<String, Void> {
     @Parameter
     @Optional(defaultValue = "30")
     @DisplayName("Keep-Alive Interval (seconds)")
+    @Summary("Interval in seconds to send keep-alive comments to clients")
     private int keepAliveInterval;
 
     /**
@@ -73,10 +82,14 @@ public class SSEServerSource extends Source<String, Void> {
     @Parameter
     @Optional(defaultValue = "100")
     @DisplayName("Max Concurrent Clients")
+    @Summary("Maximum number of concurrent SSE client connections")
     private int maxConcurrentClients;
 
     private SSEConnection sseConnection;
     private ScheduledExecutorService keepAliveScheduler;
+    private HttpServer httpServer;
+    private RequestHandlerManager requestHandlerManager;
+    private Map<String, OutputStream> activeClientStreams;
 
     /**
      * Callback fired when the source starts
@@ -88,20 +101,187 @@ public class SSEServerSource extends Source<String, Void> {
         LOGGER.info("Starting SSE Server Source on path: {}", path);
 
         try {
+            // Initialize client streams map
+            activeClientStreams = new ConcurrentHashMap<>();
+
             // Get the connection from the connection provider
             sseConnection = connectionProvider.connect();
+
+            // Get the HTTP server from the SSE connection (it's already initialized there)
+            httpServer = sseConnection.getHttpServer();
+            
+            if (httpServer == null) {
+                throw new IllegalStateException("HTTP Server not available. " +
+                    "Make sure the listener config '" + sseConnection.getListenerConfig() + 
+                    "' exists and is started.");
+            }
+
+            LOGGER.info("Using HTTP server from listener config: {}", sseConnection.getListenerConfig());
+
+            // Create request handler for SSE endpoint
+            RequestHandler requestHandler = (requestContext, responseCallback) -> {
+                try {
+                    String requestPath = requestContext.getRequest().getPath();
+                    
+                    // Check if this is the SSE endpoint
+                    if (requestPath.equals(path) || requestPath.equals(path + "/")) {
+                        handleSSEConnection(requestContext, responseCallback, sourceCallback);
+                    } else {
+                        // Return 404 for other paths
+                        HttpResponse response = HttpResponse.builder()
+                                .statusCode(404)
+                                .reasonPhrase("Not Found")
+                                .build();
+                        responseCallback.responseReady(response, new org.mule.runtime.http.api.server.async.ResponseStatusCallback() {
+                            @Override
+                            public void responseSendFailure(Throwable throwable) {
+                                LOGGER.error("Failed to send 404 response", throwable);
+                            }
+
+                            @Override
+                            public void responseSendSuccessfully() {
+                                LOGGER.debug("404 response sent successfully");
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("Error handling HTTP request", e);
+                    HttpResponse errorResponse = HttpResponse.builder()
+                            .statusCode(500)
+                            .reasonPhrase("Internal Server Error")
+                            .build();
+                    responseCallback.responseReady(errorResponse, new org.mule.runtime.http.api.server.async.ResponseStatusCallback() {
+                        @Override
+                        public void responseSendFailure(Throwable throwable) {
+                            LOGGER.error("Failed to send error response", throwable);
+                        }
+
+                        @Override
+                        public void responseSendSuccessfully() {
+                            LOGGER.debug("Error response sent successfully");
+                        }
+                    });
+                }
+            };
+
+            // Register the request handler for the SSE path
+            requestHandlerManager = httpServer.addRequestHandler(path, requestHandler);
 
             // Start keep-alive scheduler
             startKeepAliveScheduler();
 
-            LOGGER.info("SSE Server Source started successfully. Waiting for client connections...");
-            
-            // In a real implementation, you would start an HTTP server here
-            // that handles SSE connections on the specified path
+            LOGGER.info("SSE Server Source started successfully on path: {}", path);
+            LOGGER.info("Waiting for SSE client connections...");
             
         } catch (Exception e) {
             LOGGER.error("Failed to start SSE Server Source", e);
+            cleanup();
             throw new RuntimeException("Failed to start SSE Server Source: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Cleanup resources
+     */
+    private void cleanup() {
+        if (requestHandlerManager != null) {
+            try {
+                requestHandlerManager.stop();
+                LOGGER.debug("Request handler stopped");
+            } catch (Exception e) {
+                LOGGER.error("Error stopping request handler", e);
+            }
+        }
+    }
+
+    /**
+     * Handles SSE connection from a client
+     */
+    private void handleSSEConnection(
+            org.mule.runtime.http.api.domain.request.HttpRequestContext requestContext,
+            org.mule.runtime.http.api.server.async.HttpResponseReadyCallback responseCallback,
+            SourceCallback<String, Void> sourceCallback) {
+        
+        String clientId = UUID.randomUUID().toString();
+        
+        // Check if max clients reached
+        if (sseConnection.getConnectedClientCount() >= maxConcurrentClients) {
+            LOGGER.warn("Maximum concurrent clients ({}) reached. Rejecting new client.", maxConcurrentClients);
+            HttpResponse response = HttpResponse.builder()
+                    .statusCode(503)
+                    .reasonPhrase("Service Unavailable")
+                    .build();
+            responseCallback.responseReady(response, new org.mule.runtime.http.api.server.async.ResponseStatusCallback() {
+                @Override
+                public void responseSendFailure(Throwable throwable) {
+                    LOGGER.error("Failed to send 503 response", throwable);
+                }
+
+                @Override
+                public void responseSendSuccessfully() {
+                    LOGGER.debug("503 response sent successfully");
+                }
+            });
+            return;
+        }
+
+        LOGGER.info("New SSE client connecting: {}", clientId);
+
+        try {
+            // Send SSE response headers
+            HttpResponse response = HttpResponse.builder()
+                .statusCode(200)
+                .reasonPhrase("OK")
+                .addHeader("Content-Type", "text/event-stream")
+                .addHeader("Cache-Control", "no-cache")
+                .addHeader("Connection", "keep-alive")
+                .addHeader("Access-Control-Allow-Origin", "*")
+                .build();
+
+            responseCallback.responseReady(response, new org.mule.runtime.http.api.server.async.ResponseStatusCallback() {
+                @Override
+                public void responseSendFailure(Throwable throwable) {
+                    LOGGER.error("Failed to send SSE response for client: {}", clientId, throwable);
+                }
+
+                @Override
+                public void responseSendSuccessfully() {
+                    LOGGER.info("SSE client connected: {}", clientId);
+                    
+                    try {
+                        // Trigger the source callback with connection event
+                        sourceCallback.handle(
+                            org.mule.runtime.extension.api.runtime.operation.Result.<String, Void>builder()
+                                .output("Client connected: " + clientId)
+                                .build()
+                        );
+                    } catch (Exception e) {
+                        LOGGER.error("Error handling source callback for client: {}", clientId, e);
+                    }
+                }
+            });
+
+            // Register client with SSE connection
+            // In a full implementation, you'd store the actual output stream
+            // and use it to send events to this specific client
+            
+        } catch (Exception e) {
+            LOGGER.error("Error handling SSE connection for client: {}", clientId, e);
+            HttpResponse errorResponse = HttpResponse.builder()
+                    .statusCode(500)
+                    .reasonPhrase("Internal Server Error")
+                    .build();
+            responseCallback.responseReady(errorResponse, new org.mule.runtime.http.api.server.async.ResponseStatusCallback() {
+                @Override
+                public void responseSendFailure(Throwable throwable) {
+                    LOGGER.error("Failed to send error response", throwable);
+                }
+
+                @Override
+                public void responseSendSuccessfully() {
+                    LOGGER.debug("Error response sent successfully");
+                }
+            });
         }
     }
 
@@ -112,6 +292,7 @@ public class SSEServerSource extends Source<String, Void> {
     public void onStop() {
         LOGGER.info("Stopping SSE Server Source");
 
+        // Stop keep-alive scheduler
         if (keepAliveScheduler != null && !keepAliveScheduler.isShutdown()) {
             keepAliveScheduler.shutdown();
             try {
@@ -124,12 +305,21 @@ public class SSEServerSource extends Source<String, Void> {
             }
         }
 
+        // Cleanup request handler (the HTTP server is managed by the listener config)
+        cleanup();
+
+        // Disconnect SSE connection
         if (sseConnection != null) {
             try {
                 connectionProvider.disconnect(sseConnection);
             } catch (Exception e) {
                 LOGGER.error("Error disconnecting SSE connection", e);
             }
+        }
+
+        // Clear active client streams
+        if (activeClientStreams != null) {
+            activeClientStreams.clear();
         }
 
         LOGGER.info("SSE Server Source stopped");

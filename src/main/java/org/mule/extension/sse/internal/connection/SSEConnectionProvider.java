@@ -3,12 +3,18 @@ package org.mule.extension.sse.internal.connection;
 import org.mule.runtime.api.connection.CachedConnectionProvider;
 import org.mule.runtime.api.connection.ConnectionException;
 import org.mule.runtime.api.connection.ConnectionValidationResult;
+import org.mule.runtime.api.meta.ExpressionSupport;
+import org.mule.runtime.extension.api.annotation.Expression;
 import org.mule.runtime.extension.api.annotation.param.Parameter;
-import org.mule.runtime.extension.api.annotation.param.Optional;
 import org.mule.runtime.extension.api.annotation.param.display.DisplayName;
 import org.mule.runtime.extension.api.annotation.param.display.Placement;
+import org.mule.runtime.extension.api.annotation.param.display.Summary;
+import org.mule.runtime.extension.api.annotation.param.reference.ConfigReference;
+import org.mule.runtime.http.api.HttpService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.inject.Inject;
 
 /**
  * SSE Connection Provider
@@ -24,31 +30,21 @@ public class SSEConnectionProvider implements CachedConnectionProvider<SSEConnec
     private static final Logger LOGGER = LoggerFactory.getLogger(SSEConnectionProvider.class);
 
     /**
-     * Server host for SSE server mode
+     * Injected HTTP Service to create HTTP server
      */
+    @Inject
+    private HttpService httpService;
+
     @Parameter
-    @Optional(defaultValue = "localhost")
-    @DisplayName("Server Host")
+    @Expression(ExpressionSupport.NOT_SUPPORTED)
+    @ConfigReference(
+        name = "LISTENER_CONFIG",
+        namespace = "HTTP"
+    )
+    @Summary("Reference to the <http:listener-config> used to expose the SSE endpoint")
+    @DisplayName("Listener Config")
     @Placement(order = 1)
-    private String serverHost;
-
-    /**
-     * Server port for SSE server mode
-     */
-    @Parameter
-    @Optional(defaultValue = "8080")
-    @DisplayName("Server Port")
-    @Placement(order = 2)
-    private int serverPort;
-
-    /**
-     * Base path for SSE endpoint
-     */
-    @Parameter
-    @Optional(defaultValue = "/events")
-    @DisplayName("Base Path")
-    @Placement(order = 3)
-    private String basePath;
+    private String listenerConfig;
 
     /**
      * Creates a new SSE connection
@@ -58,11 +54,10 @@ public class SSEConnectionProvider implements CachedConnectionProvider<SSEConnec
      */
     @Override
     public SSEConnection connect() throws ConnectionException {
-        LOGGER.info("Creating SSE connection - Host: {}, Port: {}, Path: {}", 
-                    serverHost, serverPort, basePath);
+        LOGGER.info("Creating SSE connection - Listener Config: {}", listenerConfig);
         
         try {
-            SSEConnection connection = new SSEConnection(serverHost, serverPort, basePath);
+            SSEConnection connection = new SSEConnection(httpService, listenerConfig);
             connection.initialize();
             LOGGER.info("SSE connection created successfully");
             return connection;
@@ -111,32 +106,5 @@ public class SSEConnectionProvider implements CachedConnectionProvider<SSEConnec
 
         LOGGER.debug("SSE connection is valid");
         return ConnectionValidationResult.success();
-    }
-
-    /**
-     * Gets the server host
-     * 
-     * @return the server host
-     */
-    public String getServerHost() {
-        return serverHost;
-    }
-
-    /**
-     * Gets the server port
-     * 
-     * @return the server port
-     */
-    public int getServerPort() {
-        return serverPort;
-    }
-
-    /**
-     * Gets the base path
-     * 
-     * @return the base path
-     */
-    public String getBasePath() {
-        return basePath;
     }
 }
