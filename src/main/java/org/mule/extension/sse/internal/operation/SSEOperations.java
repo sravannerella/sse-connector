@@ -195,4 +195,42 @@ public class SSEOperations {
             throw new RuntimeException("Failed to broadcast message: " + e.getMessage(), e);
         }
     }
+
+    /**
+     * Disconnect Client Operation
+     * 
+     * Disconnects a specific SSE client by their client ID.
+     * 
+     * @param connection the SSE connection
+     * @param clientId the ID of the client to disconnect
+     * @return a confirmation message
+     */
+    @MediaType(value = MediaType.TEXT_PLAIN, strict = false)
+    @DisplayName("Disconnect Client")
+    @Summary("Disconnects a specific SSE client by client ID")
+    public String disconnectClient(
+            @Connection SSEConnection connection,
+            @DisplayName("Client ID") @Summary("The ID of the client to disconnect")
+            String clientId) {
+        
+        LOGGER.info("Disconnecting client: {}", clientId);
+        
+        try {
+            // Validate input
+            if (clientId == null || clientId.trim().isEmpty()) {
+                throw new IllegalArgumentException("Client ID cannot be null or empty");
+            }
+
+            // Unregister the client (this will close their connection)
+            connection.unregisterClient(clientId);
+            
+            String message = String.format("Client '%s' disconnected successfully", clientId);
+            LOGGER.info(message);
+            return message;
+            
+        } catch (Exception e) {
+            LOGGER.error("Failed to disconnect client '{}'", clientId, e);
+            throw new RuntimeException("Failed to disconnect client: " + e.getMessage(), e);
+        }
+    }
 }

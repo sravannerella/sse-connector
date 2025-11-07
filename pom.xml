@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.k2</groupId>
     <artifactId>sse-connector</artifactId>
-    <version>1.0.3-SNAPSHOT</version>
+    <version>1.0.5-SNAPSHOT</version>
     <packaging>mule-extension</packaging>
     <name>SSE Extension</name>
 

@@ -15,6 +15,7 @@ import org.mule.runtime.http.api.server.HttpServer;
 import org.mule.runtime.http.api.server.RequestHandler;
 import org.mule.runtime.http.api.server.RequestHandlerManager;
 import org.mule.runtime.http.api.domain.message.response.HttpResponse;
+import org.mule.runtime.http.api.domain.entity.InputStreamHttpEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +23,8 @@ import org.mule.extension.sse.internal.connection.SSEConnection;
 import org.mule.extension.sse.internal.connection.SSEClientConnection;
 
 import java.io.OutputStream;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -228,45 +231,76 @@ public class SSEServerSource extends Source<String, Void> {
         LOGGER.info("New SSE client connecting: {}", clientId);
 
         try {
-            // Send SSE response headers
+            // Create piped streams for SSE streaming
+            PipedInputStream inputStream = new PipedInputStream(8192); // Larger buffer
+            PipedOutputStream outputStream = new PipedOutputStream(inputStream);
+            
+            // Store the output stream for this client
+            activeClientStreams.put(clientId, outputStream);
+            
+            // Register client with connection FIRST
+            SSEClientConnection clientConnection = new SSEClientConnection(clientId, outputStream);
+            sseConnection.registerClient(clientId, clientConnection);
+            
+            // Send initial connection comment to establish the stream immediately
+            // This must happen BEFORE responseReady() to avoid blocking
+            try {
+                outputStream.write(": SSE connection established\n\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                outputStream.flush();
+                LOGGER.debug("Initial comment sent to stream for client: {}", clientId);
+            } catch (Exception e) {
+                LOGGER.error("Error writing initial comment for client: {}", clientId, e);
+                throw e;
+            }
+            
+            // Create streaming response for SSE with the input stream as body
             HttpResponse response = HttpResponse.builder()
                 .statusCode(200)
                 .reasonPhrase("OK")
-                .addHeader("Content-Type", "text/event-stream")
+                .addHeader("Content-Type", "text/event-stream; charset=UTF-8")
                 .addHeader("Cache-Control", "no-cache")
                 .addHeader("Connection", "keep-alive")
                 .addHeader("Access-Control-Allow-Origin", "*")
+                .addHeader("X-Accel-Buffering", "no") // Disable nginx buffering
+                .entity(new InputStreamHttpEntity(inputStream))
                 .build();
 
+            // Send the response with streaming body
             responseCallback.responseReady(response, new org.mule.runtime.http.api.server.async.ResponseStatusCallback() {
                 @Override
                 public void responseSendFailure(Throwable throwable) {
                     LOGGER.error("Failed to send SSE response for client: {}", clientId, throwable);
+                    activeClientStreams.remove(clientId);
+                    sseConnection.unregisterClient(clientId);
+                    try {
+                        outputStream.close();
+                    } catch (Exception e) {
+                        LOGGER.error("Error closing output stream", e);
+                    }
                 }
 
                 @Override
                 public void responseSendSuccessfully() {
-                    LOGGER.info("SSE client connected: {}", clientId);
-                    
-                    try {
-                        // Trigger the source callback with connection event
-                        sourceCallback.handle(
-                            org.mule.runtime.extension.api.runtime.operation.Result.<String, Void>builder()
-                                .output("Client connected: " + clientId)
-                                .build()
-                        );
-                    } catch (Exception e) {
-                        LOGGER.error("Error handling source callback for client: {}", clientId, e);
-                    }
+                    LOGGER.info("SSE connection established for client: {}", clientId);
                 }
             });
-
-            // Register client with SSE connection
-            // In a full implementation, you'd store the actual output stream
-            // and use it to send events to this specific client
+            
+            LOGGER.info("SSE client registered and connection kept alive: {}", clientId);
+            
+            // Trigger the source callback with connection event
+            try {
+                sourceCallback.handle(
+                    org.mule.runtime.extension.api.runtime.operation.Result.<String, Void>builder()
+                        .output("Client connected: " + clientId)
+                        .build()
+                );
+            } catch (Exception e) {
+                LOGGER.error("Error handling source callback for client: {}", clientId, e);
+            }
             
         } catch (Exception e) {
             LOGGER.error("Error handling SSE connection for client: {}", clientId, e);
+            activeClientStreams.remove(clientId);
             HttpResponse errorResponse = HttpResponse.builder()
                     .statusCode(500)
                     .reasonPhrase("Internal Server Error")
