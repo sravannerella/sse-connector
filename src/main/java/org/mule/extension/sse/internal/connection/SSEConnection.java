@@ -107,8 +107,35 @@ public class SSEConnection {
     public void unregisterClient(String clientId) {
         SSEClientConnection removed = connectedClients.remove(clientId);
         if (removed != null) {
-            LOGGER.info("Client unregistered: {} (Total clients: {})", clientId, connectedClients.size());
+            try {
+                removed.close();
+            } catch (Exception e) {
+                LOGGER.error("Error closing client connection: {}", clientId, e);
+            }
+            LOGGER.info("Client unregistered and closed: {} (Total clients: {})", clientId, connectedClients.size());
+        } else {
+            LOGGER.warn("Attempted to unregister unknown client: {}", clientId);
         }
+    }
+
+    /**
+     * Disconnects all connected clients
+     */
+    public void disconnectAllClients() {
+        LOGGER.info("Disconnecting all clients (Total: {})", connectedClients.size());
+        
+        // Close all client connections
+        connectedClients.forEach((clientId, connection) -> {
+            try {
+                connection.close();
+                LOGGER.debug("Client {} disconnected", clientId);
+            } catch (Exception e) {
+                LOGGER.error("Error closing client connection: {}", clientId, e);
+            }
+        });
+        
+        connectedClients.clear();
+        LOGGER.info("All clients disconnected");
     }
 
     /**

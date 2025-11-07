@@ -291,7 +291,7 @@ public class SSEServerSource extends Source<String, Void> {
             try {
                 sourceCallback.handle(
                     org.mule.runtime.extension.api.runtime.operation.Result.<String, Void>builder()
-                        .output("Client connected: " + clientId)
+                        .output(clientId)
                         .build()
                 );
             } catch (Exception e) {

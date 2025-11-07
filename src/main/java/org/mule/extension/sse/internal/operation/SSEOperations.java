@@ -213,7 +213,7 @@ public class SSEOperations {
             @DisplayName("Client ID") @Summary("The ID of the client to disconnect")
             String clientId) {
         
-        LOGGER.info("Disconnecting client: {}", clientId);
+        LOGGER.info("Disconnect operation called for client: {}", clientId);
         
         try {
             // Validate input
@@ -221,8 +221,16 @@ public class SSEOperations {
                 throw new IllegalArgumentException("Client ID cannot be null or empty");
             }
 
+            // Log current client count before disconnect
+            int beforeCount = connection.getConnectedClientCount();
+            LOGGER.info("Connected clients before disconnect: {}", beforeCount);
+            
             // Unregister the client (this will close their connection)
             connection.unregisterClient(clientId);
+            
+            // Log client count after disconnect
+            int afterCount = connection.getConnectedClientCount();
+            LOGGER.info("Connected clients after disconnect: {}", afterCount);
             
             String message = String.format("Client '%s' disconnected successfully", clientId);
             LOGGER.info(message);
@@ -231,6 +239,37 @@ public class SSEOperations {
         } catch (Exception e) {
             LOGGER.error("Failed to disconnect client '{}'", clientId, e);
             throw new RuntimeException("Failed to disconnect client: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Disconnect All Clients Operation
+     * 
+     * Disconnects all connected SSE clients.
+     * 
+     * @param connection the SSE connection
+     * @return a confirmation message with the count of disconnected clients
+     */
+    @MediaType(value = MediaType.TEXT_PLAIN, strict = false)
+    @DisplayName("Disconnect All Clients")
+    @Summary("Disconnects all connected SSE clients")
+    public String disconnectAllClients(@Connection SSEConnection connection) {
+        
+        LOGGER.info("Disconnecting all clients");
+        
+        try {
+            int clientCount = connection.getConnectedClientCount();
+            
+            // Disconnect all clients
+            connection.disconnectAllClients();
+            
+            String message = String.format("All clients disconnected successfully. Total disconnected: %d", clientCount);
+            LOGGER.info(message);
+            return message;
+            
+        } catch (Exception e) {
+            LOGGER.error("Failed to disconnect all clients", e);
+            throw new RuntimeException("Failed to disconnect all clients: " + e.getMessage(), e);
         }
     }
 }
