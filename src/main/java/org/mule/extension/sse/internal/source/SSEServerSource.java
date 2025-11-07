@@ -8,7 +8,6 @@ import org.mule.runtime.extension.api.annotation.param.MediaType;
 import org.mule.runtime.extension.api.annotation.param.Parameter;
 import org.mule.runtime.extension.api.annotation.param.Optional;
 import org.mule.runtime.extension.api.annotation.param.display.DisplayName;
-import org.mule.runtime.extension.api.runtime.operation.Result;
 import org.mule.runtime.extension.api.runtime.source.Source;
 import org.mule.runtime.extension.api.runtime.source.SourceCallback;
 import org.slf4j.Logger;
@@ -102,12 +101,7 @@ public class SSEServerSource extends Source<String, Void> {
             
         } catch (Exception e) {
             LOGGER.error("Failed to start SSE Server Source", e);
-            throw new MuleException() {
-                @Override
-                public String getMessage() {
-                    return "Failed to start SSE Server Source: " + e.getMessage();
-                }
-            };
+            throw new RuntimeException("Failed to start SSE Server Source: " + e.getMessage(), e);
         }
     }
 

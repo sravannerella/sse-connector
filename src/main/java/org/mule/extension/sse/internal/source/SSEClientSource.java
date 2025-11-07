@@ -16,7 +16,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.mule.extension.sse.internal.connection.SSEConnection;
-import org.mule.extension.sse.internal.connection.SSEEventListener;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -139,12 +138,7 @@ public class SSEClientSource extends Source<String, Void> {
             
         } catch (Exception e) {
             LOGGER.error("Failed to start SSE Client Source", e);
-            throw new MuleException() {
-                @Override
-                public String getMessage() {
-                    return "Failed to start SSE Client Source: " + e.getMessage();
-                }
-            };
+            throw new RuntimeException("Failed to start SSE Client Source: " + e.getMessage(), e);
         }
     }
 

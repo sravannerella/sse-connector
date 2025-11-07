@@ -4,7 +4,6 @@ import org.mule.extension.sse.internal.connection.SSEConnection;
 import org.mule.runtime.extension.api.annotation.param.Connection;
 import org.mule.runtime.extension.api.annotation.param.MediaType;
 import org.mule.runtime.extension.api.annotation.param.Optional;
-import org.mule.runtime.extension.api.annotation.param.Parameter;
 import org.mule.runtime.extension.api.annotation.param.display.DisplayName;
 import org.mule.runtime.extension.api.annotation.param.display.Summary;
 import org.slf4j.Logger;
@@ -46,15 +45,9 @@ public class SSEOperations {
     @Summary("Sends an event to all connected SSE clients")
     public String sendEvent(
             @Connection SSEConnection connection,
-            
-            @Parameter
-            @DisplayName("Event Name")
-            @Summary("The name of the event to send")
+            @DisplayName("Event Name") @Summary("The name of the event to send")
             String eventName,
-            
-            @Parameter
-            @DisplayName("Event Data")
-            @Summary("The data payload of the event")
+            @DisplayName("Event Data") @Summary("The data payload of the event")
             String eventData) {
         
         LOGGER.info("Sending event '{}' to all connected clients", eventName);
@@ -101,21 +94,11 @@ public class SSEOperations {
     @Summary("Sends a custom event with metadata to all connected SSE clients")
     public String sendCustomEvent(
             @Connection SSEConnection connection,
-            
-            @Parameter
-            @DisplayName("Event Name")
-            @Summary("The name of the event to send")
+            @DisplayName("Event Name") @Summary("The name of the event to send")
             String eventName,
-            
-            @Parameter
-            @DisplayName("Event Data")
-            @Summary("The data payload of the event")
+            @DisplayName("Event Data") @Summary("The data payload of the event")
             String eventData,
-            
-            @Parameter
-            @Optional
-            @DisplayName("Event ID")
-            @Summary("Optional event ID for client-side tracking")
+            @Optional @DisplayName("Event ID") @Summary("Optional event ID for client-side tracking")
             String eventId) {
         
         LOGGER.info("Sending custom event '{}' with ID '{}' to all connected clients", 
@@ -187,10 +170,7 @@ public class SSEOperations {
     @Summary("Broadcasts a simple message to all connected SSE clients")
     public String broadcastMessage(
             @Connection SSEConnection connection,
-            
-            @Parameter
-            @DisplayName("Message")
-            @Summary("The message to broadcast to all clients")
+            @DisplayName("Message") @Summary("The message to broadcast to all clients")
             String message) {
         
         LOGGER.info("Broadcasting message to all connected clients");
