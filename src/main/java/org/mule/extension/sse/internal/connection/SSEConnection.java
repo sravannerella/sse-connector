@@ -159,6 +159,34 @@ public class SSEConnection {
     }
 
     /**
+     * Sends an event to a specific client (unicast)
+     * 
+     * @param clientId the client ID
+     * @param eventName the event name
+     * @param eventData the event data
+     * @throws IllegalArgumentException if client not found
+     */
+    public void sendEventToClient(String clientId, String eventName, String eventData) {
+        LOGGER.debug("Sending event '{}' to client: {}", eventName, clientId);
+        
+        SSEClientConnection clientConnection = connectedClients.get(clientId);
+        
+        if (clientConnection == null) {
+            throw new IllegalArgumentException("Client not found: " + clientId);
+        }
+        
+        try {
+            clientConnection.sendEvent(eventName, eventData);
+            LOGGER.debug("Event '{}' sent successfully to client: {}", eventName, clientId);
+        } catch (Exception e) {
+            LOGGER.error("Failed to send event to client: {}", clientId, e);
+            // Remove failed client
+            unregisterClient(clientId);
+            throw new RuntimeException("Failed to send event to client: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Adds an event listener
      * 
      * @param listener the event listener

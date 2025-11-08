@@ -242,14 +242,15 @@ public class SSEServerSource extends Source<String, Void> {
             SSEClientConnection clientConnection = new SSEClientConnection(clientId, outputStream);
             sseConnection.registerClient(clientId, clientConnection);
             
-            // Send initial connection comment to establish the stream immediately
+            // Send initial connection event to establish the stream immediately
             // This must happen BEFORE responseReady() to avoid blocking
             try {
-                outputStream.write(": SSE connection established\n\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                String connectionEvent = "event: connection\ndata: Connection established\n\n";
+                outputStream.write(connectionEvent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 outputStream.flush();
-                LOGGER.debug("Initial comment sent to stream for client: {}", clientId);
+                LOGGER.debug("Initial connection event sent to stream for client: {}", clientId);
             } catch (Exception e) {
-                LOGGER.error("Error writing initial comment for client: {}", clientId, e);
+                LOGGER.error("Error writing initial connection event for client: {}", clientId, e);
                 throw e;
             }
             
