@@ -1,0 +1,79 @@
+@startuml SSE Server Connection Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title SSE Server Source - Client Connection Flow
+
+actor "SSE Client" as client
+participant "HTTP Listener" as http
+participant "SSEServerSource" as source
+participant "SSEConnection" as connection
+participant "SSEClientConnection" as clientConn
+participant "PipedOutputStream" as outputStream
+participant "PipedInputStream" as inputStream
+
+== Connection Initialization ==
+
+client -> http: HTTP GET /events\n(Accept: text/event-stream)
+activate http
+
+http -> source: handleSSEConnection()
+activate source
+
+source -> source: Generate unique clientId\n(UUID)
+
+alt Max clients reached
+    source -> http: 503 Service Unavailable
+    http -> client: Connection rejected
+else Accept connection
+
+    source -> inputStream: new PipedInputStream(8192)
+    activate inputStream
+    
+    source -> outputStream: new PipedOutputStream(inputStream)
+    activate outputStream
+    
+    source -> source: activeClientStreams.put(clientId, outputStream)
+    
+    source -> clientConn: new SSEClientConnection(clientId, outputStream)
+    activate clientConn
+    
+    source -> connection: registerClient(clientId, clientConn)
+    activate connection
+    connection -> connection: connectedClients.put(clientId, clientConn)
+    connection --> source: Client registered
+    deactivate connection
+    
+    source -> outputStream: write(": SSE connection established\\n\\n")
+    note right: Initial comment establishes stream
+    
+    source -> outputStream: flush()
+    
+    source -> http: HttpResponse\n(200 OK, text/event-stream)\n+ InputStreamHttpEntity(inputStream)
+    
+    http -> client: 200 OK\nContent-Type: text/event-stream\nCache-Control: no-cache\nConnection: keep-alive
+    
+    note over client, inputStream
+        HTTP connection remains open
+        Client reads from inputStream
+        which is fed by outputStream
+    end note
+    
+    deactivate http
+    
+    source -> source: Trigger SourceCallback\n("Client connected: " + clientId)
+    
+end
+
+== Connection Active ==
+
+note over client, clientConn
+    Connection is now active and maintained
+    Client waits for SSE events
+    PipedOutputStream → PipedInputStream → HTTP Response Stream
+end note
+
+deactivate source
+
+@enduml

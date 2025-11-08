@@ -1,0 +1,83 @@
+@startuml SSE Broadcast Message Operation
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title SSE Operations - Broadcast Message Flow
+
+actor "Mule Flow" as flow
+participant "SSEOperations" as ops
+participant "SSEConnection" as connection
+participant "SSEClientConnection" as clientConn
+participant "PipedOutputStream" as stream
+actor "SSE Clients" as clients
+
+== Broadcast Message Operation ==
+
+flow -> ops: broadcastMessage(connection, "System maintenance in 5 minutes")
+activate ops
+
+ops -> ops: Log: "Broadcasting message to all connected clients"
+
+ops -> ops: Default message to "" if null
+
+ops -> connection: broadcastEvent("", "System maintenance in 5 minutes")
+note right: Empty event name means\ndefault "message" event
+activate connection
+
+connection -> connection: Log: "Broadcasting event to X clients"
+
+loop For each connected client
+
+    connection -> clientConn: sendEvent("", "System maintenance in 5 minutes")
+    activate clientConn
+    
+    clientConn -> clientConn: Check if connected
+    
+    clientConn -> clientConn: Format SSE message:\n"data: System maintenance in 5 minutes\\n\\n"
+    note right: No "event:" line\nmeans default message event
+    
+    clientConn -> stream: write(messageBytes)
+    activate stream
+    
+    stream -> clients: Stream data through HTTP
+    
+    clientConn -> stream: flush()
+    
+    stream --> clientConn: Success
+    deactivate stream
+    
+    clientConn --> connection: Message sent
+    deactivate clientConn
+    
+    alt Client write fails
+        connection -> connection: Log error
+        connection -> connection: unregisterClient(clientId)
+        note right: Failed clients removed automatically
+    end
+
+end
+
+connection -> connection: getConnectedClientCount()
+connection --> ops: Return client count
+
+deactivate connection
+
+ops -> ops: Format response:\n"Message broadcast successfully to X client(s)"
+
+ops -> ops: Log response message
+
+ops --> flow: Return confirmation message
+deactivate ops
+
+note over clients
+    All clients receive:
+    data: System maintenance in 5 minutes
+    
+    (blank line ends message)
+    
+    Client interprets as 'message' event
+    since no event name specified
+end note
+
+@enduml

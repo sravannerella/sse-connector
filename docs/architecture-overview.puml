@@ -1,0 +1,90 @@
+@startuml SSE Connector Architecture Overview
+' !theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 12
+skinparam packageStyle rectangle
+
+title SSE Connector - Architecture Overview
+
+package "SSE Connector Components" {
+    
+    package "Configuration Layer" {
+        [SSEConfiguration] as config
+        [SSEConnectionProvider] as provider
+    }
+    
+    package "Connection Layer" {
+        [SSEConnection] as connection
+        [SSEClientConnection] as clientConn
+    }
+    
+    package "Source Layer" {
+        [SSEServerSource] as serverSource
+        [SSEClientSource] as clientSource
+    }
+    
+    package "Operations Layer" {
+        [SSEOperations] as operations
+    }
+    
+    package "HTTP Integration" {
+        [HttpService] as httpService
+        [HttpServer] as httpServer
+    }
+}
+
+package "External Systems" {
+    actor "SSE Client\n(Browser/App)" as client
+    actor "Mule Flow" as muleFlow
+    [HTTP Listener Config] as httpListener
+}
+
+' Configuration relationships
+config --> provider : configures
+provider --> connection : creates
+provider --> httpService : injects
+
+' Connection relationships
+connection --> httpService : uses
+connection --> httpServer : manages
+connection --> clientConn : manages multiple
+
+' Source relationships
+serverSource --> connection : uses
+serverSource --> httpServer : registers handler
+serverSource --> clientConn : creates
+clientSource --> connection : uses
+
+' Operations relationships
+operations --> connection : uses
+operations --> clientConn : sends events to
+
+' External interactions
+httpListener --> httpServer : provides
+client --> serverSource : connects to\n(HTTP GET)
+serverSource --> client : streams events
+muleFlow --> operations : calls
+muleFlow --> serverSource : receives connection events
+clientSource --> client : receives events from
+
+note right of connection
+  Central hub for:
+  - Client registry
+  - Event broadcasting
+  - HTTP server lookup
+end note
+
+note right of serverSource
+  Listens for incoming
+  SSE client connections
+  on HTTP endpoint
+end note
+
+note right of operations
+  Allows Mule flows to:
+  - Send events
+  - Broadcast messages
+  - Disconnect clients
+end note
+
+@enduml

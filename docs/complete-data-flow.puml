@@ -1,0 +1,85 @@
+@startuml SSE Data Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+
+title SSE Connector - Complete Data Flow
+
+participant "SSE Client\n(Browser)" as client
+participant "HTTP Listener" as http
+participant "SSEServerSource" as source
+participant "SSEConnection" as connection
+participant "SSEClientConnection" as clientConn
+participant "PipedOutputStream" as pipeOut
+participant "PipedInputStream" as pipeIn
+participant "Mule Flow" as flow
+participant "SSEOperations" as ops
+
+== Phase 1: Client Connection ==
+
+client -> http: GET /events (Accept: text/event-stream)
+http -> source: HTTP Request
+source -> pipeIn: Create PipedInputStream(8192)
+source -> pipeOut: Create PipedOutputStream(pipeIn)
+source -> clientConn: new SSEClientConnection(clientId, pipeOut)
+source -> connection: registerClient(clientId, clientConn)
+source -> pipeOut: Write initial comment
+source -> http: HttpResponse(200, InputStreamHttpEntity(pipeIn))
+http -> client: 200 OK, text/event-stream\n[Stream Open]
+
+note over client, pipeIn
+    Connection established
+    PipedOutputStream writes → PipedInputStream reads → HTTP streams to client
+end note
+
+source -> flow: SourceCallback("Client connected: " + clientId)
+
+== Phase 2: Sending Events ==
+
+flow -> ops: sendEvent(connection, "notification", "Hello")
+ops -> connection: broadcastEvent("notification", "Hello")
+connection -> clientConn: sendEvent("notification", "Hello")
+clientConn -> clientConn: Format: "event: notification\\ndata: Hello\\n\\n"
+clientConn -> pipeOut: write(bytes)
+pipeOut -> pipeIn: Transfer through pipe
+pipeIn -> http: Read stream
+http -> client: Stream SSE event data
+
+note over client
+    Receives and processes:
+    event: notification
+    data: Hello
+end note
+
+== Phase 3: Broadcasting to Multiple Clients ==
+
+flow -> ops: broadcastMessage(connection, "System update")
+ops -> connection: broadcastEvent("", "System update")
+
+loop For each connected client
+    connection -> clientConn: sendEvent("", "System update")
+    clientConn -> pipeOut: write(bytes)
+    pipeOut -> pipeIn: Transfer
+    pipeIn -> http: Stream
+    http -> client: Deliver to all clients
+end
+
+== Phase 4: Client Disconnection ==
+
+flow -> ops: disconnectClient(connection, clientId)
+ops -> connection: unregisterClient(clientId)
+connection -> clientConn: close()
+clientConn -> pipeOut: Write "event: connectionClosed\\ndata: Connection closed\\n\\n"
+clientConn -> pipeOut: flush()
+clientConn -> pipeOut: close()
+pipeOut -> pipeIn: Final data transfer
+pipeIn -> http: Stream close event
+http -> client: Deliver close event then end stream
+pipeOut -> pipeIn: Pipe closed
+http -> client: [Connection Closed]
+
+note over client
+    Receives close event and
+    connection terminates gracefully
+end note
+
+@enduml

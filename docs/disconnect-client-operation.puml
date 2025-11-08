@@ -1,0 +1,90 @@
+@startuml SSE Disconnect Client Operation
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title SSE Operations - Disconnect Client Flow
+
+actor "Mule Flow" as flow
+participant "SSEOperations" as ops
+participant "SSEConnection" as connection
+participant "SSEClientConnection" as clientConn
+participant "PipedOutputStream" as outputStream
+actor "SSE Client" as sseClient
+
+== Disconnect Client Operation ==
+
+flow -> ops: disconnectClient(connection, "client-uuid-123")
+activate ops
+
+ops -> ops: Log disconnect operation called
+
+ops -> ops: Validate clientId not null/empty
+
+ops -> connection: getConnectedClientCount()
+activate connection
+connection --> ops: Return count (e.g., 3)
+deactivate connection
+
+ops -> ops: Log client count before disconnect
+
+ops -> connection: unregisterClient("client-uuid-123")
+activate connection
+
+connection -> connection: connectedClients.remove(clientId)
+
+alt Client found in registry
+
+    connection -> clientConn: close()
+    activate clientConn
+    
+    clientConn -> clientConn: Check if already closed
+    
+    clientConn -> clientConn: Set connected = false
+    
+    clientConn -> outputStream: Write close message:\n"event: connectionClosed\\n" +\n"data: Connection closed by server\\n\\n"
+    activate outputStream
+    
+    outputStream -> sseClient: Stream close event
+    note right: Client receives\nconnectionClosed event
+    
+    clientConn -> outputStream: flush()
+    
+    clientConn -> outputStream: close()
+    
+    outputStream --> clientConn: Stream closed
+    deactivate outputStream
+    
+    note over sseClient
+        Connection terminated
+        Client receives close event
+        HTTP stream ends
+    end note
+    
+    clientConn --> connection: Connection closed successfully
+    deactivate clientConn
+    
+    connection -> connection: Log: "Client unregistered and closed"
+
+else Client not found
+    
+    connection -> connection: Log warning:\n"Attempted to unregister unknown client"
+
+end
+
+connection --> ops: Client unregistered
+deactivate connection
+
+ops -> connection: getConnectedClientCount()
+activate connection
+connection --> ops: Return new count (e.g., 2)
+deactivate connection
+
+ops -> ops: Log client count after disconnect
+
+ops -> ops: Format success message:\n"Client 'client-uuid-123' disconnected successfully"
+
+ops --> flow: Return confirmation message
+deactivate ops
+
+@enduml

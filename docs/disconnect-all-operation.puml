@@ -1,0 +1,85 @@
+@startuml SSE Disconnect All Clients Operation
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title SSE Operations - Disconnect All Clients Flow
+
+actor "Mule Flow" as flow
+participant "SSEOperations" as ops
+participant "SSEConnection" as connection
+participant "Client 1" as client1
+participant "Client 2" as client2
+participant "Client 3" as client3
+actor "SSE Clients" as sseClients
+
+== Disconnect All Clients Operation ==
+
+flow -> ops: disconnectAllClients(connection)
+activate ops
+
+ops -> ops: Log: "Disconnecting all clients"
+
+ops -> connection: getConnectedClientCount()
+activate connection
+connection --> ops: Return count (e.g., 3)
+deactivate connection
+
+ops -> ops: Store count for response message
+
+ops -> connection: disconnectAllClients()
+activate connection
+
+connection -> connection: Log: "Disconnecting all clients (Total: 3)"
+
+loop For each client in connectedClients map
+
+    connection -> client1: close()
+    activate client1
+    client1 -> client1: Write close event:\n"event: connectionClosed\\n" +\n"data: Connection closed by server\\n\\n"
+    client1 -> client1: flush() and close() outputStream
+    client1 --> connection: Closed
+    deactivate client1
+    connection -> connection: Log: "Client 1 disconnected"
+    
+    alt Error closing client
+        connection -> connection: Log error but continue
+    end
+    
+    connection -> client2: close()
+    activate client2
+    client2 -> client2: Write close event and close stream
+    client2 --> connection: Closed
+    deactivate client2
+    connection -> connection: Log: "Client 2 disconnected"
+    
+    connection -> client3: close()
+    activate client3
+    client3 -> client3: Write close event and close stream
+    client3 --> connection: Closed
+    deactivate client3
+    connection -> connection: Log: "Client 3 disconnected"
+
+end
+
+note over sseClients
+    All clients receive
+    connectionClosed event
+    before stream ends
+end note
+
+connection -> connection: connectedClients.clear()
+
+connection -> connection: Log: "All clients disconnected"
+
+connection --> ops: All clients disconnected
+deactivate connection
+
+ops -> ops: Format success message:\n"All clients disconnected successfully. Total disconnected: 3"
+
+ops -> ops: Log success message
+
+ops --> flow: Return confirmation message
+deactivate ops
+
+@enduml

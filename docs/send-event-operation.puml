@@ -1,0 +1,96 @@
+@startuml SSE Send Event Operation
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title SSE Operations - Send Event Flow
+
+actor "Mule Flow" as flow
+participant "SSEOperations" as ops
+participant "SSEConnection" as connection
+participant "SSEClientConnection\n(Client 1)" as client1
+participant "SSEClientConnection\n(Client 2)" as client2
+participant "PipedOutputStream\n(Client 1)" as stream1
+participant "PipedOutputStream\n(Client 2)" as stream2
+actor "SSE Client 1" as sseClient1
+actor "SSE Client 2" as sseClient2
+
+== Send Event Operation ==
+
+flow -> ops: sendEvent(connection, "notification", "Hello World")
+activate ops
+
+ops -> ops: Validate eventName not empty
+ops -> ops: Default eventData to "" if null
+
+ops -> connection: broadcastEvent("notification", "Hello World")
+activate connection
+
+connection -> connection: Get all connectedClients\n(iterate through Map)
+
+loop For each connected client
+
+    connection -> client1: sendEvent("notification", "Hello World")
+    activate client1
+    
+    client1 -> client1: Check if connected
+    
+    client1 -> client1: Format SSE message:\n"event: notification\\ndata: Hello World\\n\\n"
+    
+    client1 -> stream1: write(messageBytes)
+    activate stream1
+    
+    stream1 -> sseClient1: Stream data through HTTP
+    note right: Data flows through\nPipedInputStream to HTTP response
+    
+    client1 -> stream1: flush()
+    
+    stream1 --> client1: Success
+    deactivate stream1
+    
+    client1 --> connection: Event sent
+    deactivate client1
+    
+    alt Client write fails
+        connection -> connection: Log error
+        connection -> connection: unregisterClient(clientId)
+        note right: Failed clients are automatically removed
+    end
+    
+    connection -> client2: sendEvent("notification", "Hello World")
+    activate client2
+    
+    client2 -> stream2: write(messageBytes)
+    activate stream2
+    
+    stream2 -> sseClient2: Stream data through HTTP
+    
+    client2 -> stream2: flush()
+    
+    stream2 --> client2: Success
+    deactivate stream2
+    
+    client2 --> connection: Event sent
+    deactivate client2
+
+end
+
+connection -> connection: getConnectedClientCount()
+connection --> ops: Return client count
+
+deactivate connection
+
+ops -> ops: Format success message:\n"Event 'notification' sent to 2 clients"
+
+ops --> flow: Return confirmation message
+deactivate ops
+
+note over sseClient1, sseClient2
+    Both clients receive:
+    event: notification
+    data: Hello World
+    
+    (blank line ends message)
+end note
+
+@enduml

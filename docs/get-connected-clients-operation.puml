@@ -1,0 +1,41 @@
+@startuml SSE Get Connected Clients Operation
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title SSE Operations - Get Connected Clients Flow
+
+actor "Mule Flow" as flow
+participant "SSEOperations" as ops
+participant "SSEConnection" as connection
+
+== Get Connected Clients Operation ==
+
+flow -> ops: getConnectedClients(connection)
+activate ops
+
+ops -> ops: Log: "Getting connected clients count"
+
+ops -> connection: getConnectedClientCount()
+activate connection
+
+connection -> connection: Return connectedClients.size()
+
+connection --> ops: Return count (e.g., 5)
+deactivate connection
+
+ops -> ops: Log: "Current connected clients: 5"
+
+ops --> flow: Return integer: 5
+deactivate ops
+
+note over flow
+    Simple operation to check
+    how many clients are currently
+    connected to the SSE server
+    
+    Useful for monitoring and
+    conditional logic in flows
+end note
+
+@enduml

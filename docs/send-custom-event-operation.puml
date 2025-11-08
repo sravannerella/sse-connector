@@ -1,0 +1,94 @@
+@startuml SSE Send Custom Event Operation
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title SSE Operations - Send Custom Event Flow
+
+actor "Mule Flow" as flow
+participant "SSEOperations" as ops
+participant "SSEConnection" as connection
+participant "SSEClientConnection" as clientConn
+participant "PipedOutputStream" as stream
+actor "SSE Clients" as clients
+
+== Send Custom Event Operation ==
+
+flow -> ops: sendCustomEvent(connection, "userUpdate", \n'{"userId":123,"status":"active"}', "event-001")
+activate ops
+
+ops -> ops: Log: "Sending custom event with ID"
+
+ops -> ops: Validate eventName not empty
+
+ops -> ops: Default eventData to "" if null
+
+alt eventId is provided and not empty
+
+    ops -> ops: Format data with event ID:\n'{"id":"event-001","data":{"userId":123,"status":"active"}}'
+    note right: Wraps original data\nwith event ID
+
+else eventId is null or empty
+
+    ops -> ops: Use eventData as-is
+
+end
+
+ops -> connection: broadcastEvent("userUpdate", formattedData)
+activate connection
+
+connection -> connection: Log: "Broadcasting event to X clients"
+
+loop For each connected client
+
+    connection -> clientConn: sendEvent("userUpdate", formattedData)
+    activate clientConn
+    
+    clientConn -> clientConn: Check if connected
+    
+    clientConn -> clientConn: Format SSE message:\n"event: userUpdate\\n" +\n"data: {"id":"event-001","data":...}\\n\\n"
+    
+    clientConn -> stream: write(messageBytes)
+    activate stream
+    
+    stream -> clients: Stream data through HTTP
+    
+    clientConn -> stream: flush()
+    
+    stream --> clientConn: Success
+    deactivate stream
+    
+    clientConn --> connection: Event sent
+    deactivate clientConn
+    
+    alt Client write fails
+        connection -> connection: Log error
+        connection -> connection: unregisterClient(clientId)
+    end
+
+end
+
+connection -> connection: getConnectedClientCount()
+connection --> ops: Return client count
+
+deactivate connection
+
+ops -> ops: Format response:\n"Custom event 'userUpdate' sent successfully to X client(s)"
+
+ops -> ops: Log response message
+
+ops --> flow: Return confirmation message
+deactivate ops
+
+note over clients
+    All clients receive:
+    event: userUpdate
+    data: {"id":"event-001","data":{"userId":123,"status":"active"}}
+    
+    (blank line ends message)
+    
+    Client can track events using
+    the embedded event ID
+end note
+
+@enduml
