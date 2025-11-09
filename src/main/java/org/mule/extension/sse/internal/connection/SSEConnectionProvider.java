@@ -54,12 +54,12 @@ public class SSEConnectionProvider implements CachedConnectionProvider<SSEConnec
      */
     @Override
     public SSEConnection connect() throws ConnectionException {
-        LOGGER.info("Creating SSE connection - Listener Config: {}", listenerConfig);
+        LOGGER.debug("Creating SSE connection - Listener Config: {}", listenerConfig);
         
         try {
             SSEConnection connection = new SSEConnection(httpService, listenerConfig);
             connection.initialize();
-            LOGGER.info("SSE connection created successfully");
+            LOGGER.info("SSE connection created successfully for Listener Config: {}", listenerConfig);
             return connection;
         } catch (Exception e) {
             LOGGER.error("Failed to create SSE connection", e);
@@ -74,7 +74,7 @@ public class SSEConnectionProvider implements CachedConnectionProvider<SSEConnec
      */
     @Override
     public void disconnect(SSEConnection connection) {
-        LOGGER.info("Disconnecting SSE connection");
+        LOGGER.debug("Disconnecting SSE connection");
         
         if (connection != null) {
             try {

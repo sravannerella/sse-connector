@@ -89,6 +89,15 @@ public class SSEClientSource extends Source<String, Void> {
     @Summary("Connection timeout in milliseconds")
     private int connectionTimeout;
 
+    /**
+     * Enable automatic reconnection
+     */
+    @Parameter
+    @Optional(defaultValue = "false")
+    @DisplayName("Auto Reconnect")
+    @Summary("Automatically reconnect when connection is lost")
+    private boolean autoReconnect;
+
     private SSEConnection sseConnection;
     private AtomicBoolean running;
     private AtomicInteger receivedEventCount;
@@ -101,7 +110,7 @@ public class SSEClientSource extends Source<String, Void> {
      */
     @Override
     public void onStart(SourceCallback<String, Void> sourceCallback) throws MuleException {
-        LOGGER.info("Starting SSE Client Source - URL: {}", url);
+        LOGGER.debug("Starting SSE Client Source - URL: {}", url);
 
         running = new AtomicBoolean(true);
         receivedEventCount = new AtomicInteger(0);
@@ -118,14 +127,18 @@ public class SSEClientSource extends Source<String, Void> {
                     } catch (Exception e) {
                         LOGGER.error("Error in SSE client listener", e);
                         
-                        if (running.get()) {
-                            LOGGER.info("Reconnecting in {} seconds...", reconnectInterval);
+                        if (running.get() && autoReconnect) {
+                            LOGGER.debug("Reconnecting in {} seconds...", reconnectInterval);
                             try {
                                 Thread.sleep(reconnectInterval * 1000L);
                             } catch (InterruptedException ie) {
                                 Thread.currentThread().interrupt();
                                 break;
                             }
+                        } else {
+                            LOGGER.info("Auto-reconnect disabled. Stopping listener.");
+                            running.set(false);
+                            break;
                         }
                     }
                 }
@@ -134,7 +147,7 @@ public class SSEClientSource extends Source<String, Void> {
             listenerThread.setName("SSE-Client-Listener-" + url);
             listenerThread.start();
 
-            LOGGER.info("SSE Client Source started successfully");
+            LOGGER.debug("SSE Client Source started successfully");
             
         } catch (Exception e) {
             LOGGER.error("Failed to start SSE Client Source", e);
@@ -147,7 +160,7 @@ public class SSEClientSource extends Source<String, Void> {
      */
     @Override
     public void onStop() {
-        LOGGER.info("Stopping SSE Client Source");
+        LOGGER.debug("Stopping SSE Client Source");
 
         running.set(false);
 
@@ -168,7 +181,7 @@ public class SSEClientSource extends Source<String, Void> {
             }
         }
 
-        LOGGER.info("SSE Client Source stopped. Total events received: {}", receivedEventCount.get());
+        LOGGER.debug("SSE Client Source stopped. Total events received: {}", receivedEventCount.get());
     }
 
     /**
@@ -178,7 +191,7 @@ public class SSEClientSource extends Source<String, Void> {
      * @throws Exception if an error occurs
      */
     private void connectAndListen(SourceCallback<String, Void> sourceCallback) throws Exception {
-        LOGGER.info("Connecting to SSE endpoint: {}", url);
+        LOGGER.debug("Connecting to SSE endpoint: {}", url);
 
         HttpURLConnection connection = null;
         BufferedReader reader = null;
@@ -209,7 +222,7 @@ public class SSEClientSource extends Source<String, Void> {
                 
                 // Check if we've reached the event count limit
                 if (eventCount != null && receivedEventCount.get() >= eventCount) {
-                    LOGGER.info("Reached event count limit: {}", eventCount);
+                    LOGGER.debug("Reached event count limit: {}", eventCount);
                     running.set(false);
                     break;
                 }
@@ -252,6 +265,15 @@ public class SSEClientSource extends Source<String, Void> {
                     String retry = line.substring(6).trim();
                     LOGGER.debug("Server suggested retry interval: {}", retry);
                 }
+            }
+            
+            // If we exit the loop because readLine returned null (connection closed by server)
+            // and autoReconnect is disabled, stop the listener
+            if (!autoReconnect) {
+                LOGGER.info("Server closed connection and auto-reconnect is disabled. Stopping listener.");
+                running.set(false);
+            } else {
+                LOGGER.debug("Connection closed. Will attempt to reconnect.");
             }
 
         } finally {

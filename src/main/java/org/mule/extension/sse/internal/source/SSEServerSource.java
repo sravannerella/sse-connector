@@ -101,7 +101,7 @@ public class SSEServerSource extends Source<String, Void> {
      */
     @Override
     public void onStart(SourceCallback<String, Void> sourceCallback) throws MuleException {
-        LOGGER.info("Starting SSE Server Source on path: {}", path);
+        LOGGER.debug("Starting SSE Server Source on path: {}", path);
 
         try {
             // Initialize client streams map
@@ -119,7 +119,7 @@ public class SSEServerSource extends Source<String, Void> {
                     "' exists and is started.");
             }
 
-            LOGGER.info("Using HTTP server from listener config: {}", sseConnection.getListenerConfig());
+            LOGGER.debug("Using HTTP server from listener config: {}", sseConnection.getListenerConfig());
 
             // Create request handler for SSE endpoint
             RequestHandler requestHandler = (requestContext, responseCallback) -> {
@@ -173,8 +173,8 @@ public class SSEServerSource extends Source<String, Void> {
             // Start keep-alive scheduler
             startKeepAliveScheduler();
 
-            LOGGER.info("SSE Server Source started successfully on path: {}", path);
-            LOGGER.info("Waiting for SSE client connections...");
+            LOGGER.debug("SSE Server Source started successfully on path: {}", path);
+            LOGGER.debug("Waiting for SSE client connections...");
             
         } catch (Exception e) {
             LOGGER.error("Failed to start SSE Server Source", e);
@@ -228,7 +228,7 @@ public class SSEServerSource extends Source<String, Void> {
             return;
         }
 
-        LOGGER.info("New SSE client connecting: {}", clientId);
+        LOGGER.debug("New SSE client connecting: {}", clientId);
 
         try {
             // Create piped streams for SSE streaming
@@ -245,7 +245,7 @@ public class SSEServerSource extends Source<String, Void> {
             // Send initial connection event to establish the stream immediately
             // This must happen BEFORE responseReady() to avoid blocking
             try {
-                String connectionEvent = "event: connection\ndata: Connection established\n\n";
+                String connectionEvent = "event: connection\ndata: Connection established - " + clientId + "\n\n";
                 outputStream.write(connectionEvent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 outputStream.flush();
                 LOGGER.debug("Initial connection event sent to stream for client: {}", clientId);
@@ -282,12 +282,12 @@ public class SSEServerSource extends Source<String, Void> {
 
                 @Override
                 public void responseSendSuccessfully() {
-                    LOGGER.info("SSE connection established for client: {}", clientId);
+                    LOGGER.debug("SSE connection established for client: {}", clientId);
                 }
             });
-            
-            LOGGER.info("SSE client registered and connection kept alive: {}", clientId);
-            
+
+            LOGGER.debug("SSE client registered and connection kept alive: {}", clientId);
+
             // Trigger the source callback with connection event
             try {
                 sourceCallback.handle(
@@ -325,7 +325,7 @@ public class SSEServerSource extends Source<String, Void> {
      */
     @Override
     public void onStop() {
-        LOGGER.info("Stopping SSE Server Source");
+        LOGGER.debug("Stopping SSE Server Source");
 
         // Stop keep-alive scheduler
         if (keepAliveScheduler != null && !keepAliveScheduler.isShutdown()) {

@@ -120,19 +120,10 @@ public class SSEClientConnection {
         connected = false;
         try {
             if (outputStream != null) {
-                LOGGER.info("Closing output stream for client: {}", clientId);
-                
-                // Send a final message before closing
-                try {
-                    String closeMessage = "event: connectionClosed\ndata: Connection closed by server\n\n";
-                    outputStream.write(closeMessage.getBytes(StandardCharsets.UTF_8));
-                    outputStream.flush();
-                } catch (IOException e) {
-                    LOGGER.debug("Could not send close message to client: {}", clientId);
-                }
-                
+                LOGGER.debug("Closing output stream for client: {}", clientId);
+                outputStream.flush();
                 outputStream.close();
-                LOGGER.info("Client connection closed successfully: {}", clientId);
+                LOGGER.debug("Client connection closed successfully: {}", clientId);
             }
         } catch (IOException e) {
             LOGGER.error("Error closing client connection: {}", clientId, e);

@@ -60,7 +60,7 @@ public class SSEConnection {
             return;
         }
 
-        LOGGER.info("Initializing SSE connection - Listener Config: {}", listenerConfig);
+        LOGGER.debug("Initializing SSE connection - Listener Config: {}", listenerConfig);
         
         try {
             // Get the HTTP server from the referenced listener config
@@ -72,15 +72,15 @@ public class SSEConnection {
                         "Make sure the http:listener-config exists and is started before this SSE connection.");
                 }
                 
-                LOGGER.info("HTTP server obtained from listener config: {}", listenerConfig);
+                LOGGER.debug("HTTP server obtained from listener config: {}", listenerConfig);
             } else {
                 LOGGER.warn("No listener config specified, HTTP server will be null");
             }
             
             // Initialize connection resources
             this.initialized = true;
-            
-            LOGGER.info("SSE connection initialized successfully");
+
+            LOGGER.debug("SSE connection initialized successfully");
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -96,7 +96,7 @@ public class SSEConnection {
      */
     public void registerClient(String clientId, SSEClientConnection clientConnection) {
         connectedClients.put(clientId, clientConnection);
-        LOGGER.info("Client registered: {} (Total clients: {})", clientId, connectedClients.size());
+        LOGGER.debug("Client registered: {} (Total clients: {})", clientId, connectedClients.size());
     }
 
     /**
@@ -112,7 +112,7 @@ public class SSEConnection {
             } catch (Exception e) {
                 LOGGER.error("Error closing client connection: {}", clientId, e);
             }
-            LOGGER.info("Client unregistered and closed: {} (Total clients: {})", clientId, connectedClients.size());
+            LOGGER.debug("Client unregistered and closed: {} (Total clients: {})", clientId, connectedClients.size());
         } else {
             LOGGER.warn("Attempted to unregister unknown client: {}", clientId);
         }
@@ -122,7 +122,7 @@ public class SSEConnection {
      * Disconnects all connected clients
      */
     public void disconnectAllClients() {
-        LOGGER.info("Disconnecting all clients (Total: {})", connectedClients.size());
+        LOGGER.debug("Disconnecting all clients (Total: {})", connectedClients.size());
         
         // Close all client connections
         connectedClients.forEach((clientId, connection) -> {
@@ -135,7 +135,7 @@ public class SSEConnection {
         });
         
         connectedClients.clear();
-        LOGGER.info("All clients disconnected");
+        LOGGER.debug("All clients disconnected");
     }
 
     /**
@@ -244,7 +244,7 @@ public class SSEConnection {
      * Closes the SSE connection and cleans up resources
      */
     public void close() {
-        LOGGER.info("Closing SSE connection");
+        LOGGER.debug("Closing SSE connection");
         
         // Close all client connections
         connectedClients.forEach((clientId, connection) -> {

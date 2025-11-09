@@ -57,7 +57,7 @@ public class SSEOperations {
             @Optional @DisplayName("Event ID") @Summary("Optional event ID for client-side tracking")
             String eventId) {
         
-        LOGGER.info("Sending event '{}' to client: {}", eventName, clientId);
+        LOGGER.debug("Sending event '{}' to client: {}", eventName, clientId);
         
         try {
             // Validate inputs
@@ -85,7 +85,7 @@ public class SSEOperations {
             String message = String.format("Event '%s' sent successfully to client '%s'", 
                                          eventName, clientId);
             
-            LOGGER.info(message);
+            LOGGER.debug(message);
             return message;
             
         } catch (Exception e) {
@@ -130,7 +130,7 @@ public class SSEOperations {
             @DisplayName("Message") @Summary("The message to broadcast to all clients")
             String message) {
         
-        LOGGER.info("Broadcasting message to all connected clients");
+        LOGGER.debug("Broadcasting message to all connected clients");
         
         try {
             if (message == null) {
@@ -144,7 +144,7 @@ public class SSEOperations {
             String response = String.format("Message broadcast successfully to %d client(s)", 
                                           clientCount);
             
-            LOGGER.info(response);
+            LOGGER.debug(response);
             return response;
             
         } catch (Exception e) {
@@ -170,7 +170,7 @@ public class SSEOperations {
             @DisplayName("Client ID") @Summary("The ID of the client to disconnect")
             String clientId) {
         
-        LOGGER.info("Disconnect operation called for client: {}", clientId);
+        LOGGER.debug("Disconnect operation called for client: {}", clientId);
         
         try {
             // Validate input
@@ -180,17 +180,17 @@ public class SSEOperations {
 
             // Log current client count before disconnect
             int beforeCount = connection.getConnectedClientCount();
-            LOGGER.info("Connected clients before disconnect: {}", beforeCount);
+            LOGGER.debug("Connected clients before disconnect: {}", beforeCount);
             
             // Unregister the client (this will close their connection)
             connection.unregisterClient(clientId);
             
             // Log client count after disconnect
             int afterCount = connection.getConnectedClientCount();
-            LOGGER.info("Connected clients after disconnect: {}", afterCount);
+            LOGGER.debug("Connected clients after disconnect: {}", afterCount);
             
             String message = String.format("Client '%s' disconnected successfully", clientId);
-            LOGGER.info(message);
+            LOGGER.debug(message);
             return message;
             
         } catch (Exception e) {
